@@ -29,9 +29,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The bootstrap may contain a newer workflow, but the Actions token is
+          # not allowed to update workflow files. Publish source separately.
+          git restore --source=HEAD -- .github/workflows/build-release.yml
           git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "Add native Android alpha"
+            git commit -m "Add native browsing redesign"
             git push origin HEAD:main
           fi
 
