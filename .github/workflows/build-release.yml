@@ -1,4 +1,4 @@
-name: Build and publish alpha
+name: Build and publish v0.1.2 alpha
 
 on:
   push:
@@ -14,6 +14,34 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Expand v0.1.2 source patch
+        run: |
+          if [ -d .bootstrap-v012 ]; then
+            cat .bootstrap-v012/part00 \
+                .bootstrap-v012/part01 \
+                .bootstrap-v012/part020 \
+                .bootstrap-v012/part021 \
+                .bootstrap-v012/part030 > patch.b64
+            head -c 3500 .bootstrap-v012/part031 >> patch.b64
+            cat .bootstrap-v012/part040 \
+                .bootstrap-v012/part041 \
+                .bootstrap-v012/part05 >> patch.b64
+            echo "4791b3b0f3c98e2cd6c5663afaf780ad456ab2ec0eb85d111d8aa0d4cd29fc1c  patch.b64" | sha256sum -c -
+            base64 --decode patch.b64 > patch.zip
+            unzip -o patch.zip
+            rm -rf patch.b64 patch.zip .bootstrap-v012
+          fi
+
+      - name: Publish expanded source to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Fix authentication and native source parsing"
+            git push origin HEAD:main
+          fi
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -32,19 +60,19 @@ jobs:
       - name: Prepare release asset
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/Minecraft-AIO-v0.1.1-alpha.apk
-          sha256sum release/Minecraft-AIO-v0.1.1-alpha.apk > release/Minecraft-AIO-v0.1.1-alpha.apk.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk release/Minecraft-AIO-v0.1.2-alpha.apk
+          sha256sum release/Minecraft-AIO-v0.1.2-alpha.apk > release/Minecraft-AIO-v0.1.2-alpha.apk.sha256
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Minecraft-AIO-v0.1.1-alpha
+          name: Minecraft-AIO-v0.1.2-alpha
           path: release/*
 
       - name: Create or repair GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v0.1.1-alpha
+          TAG: v0.1.2-alpha
         run: |
           TARGET="$(git rev-parse HEAD)"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -52,7 +80,7 @@ jobs:
           else
             gh release create "$TAG" release/* \
               --target "$TARGET" \
-              --title "Minecraft AIO v0.1.1-alpha" \
-              --notes "Native browsing redesign: responsive branded account controls, in-app source catalogs, native details, screenshots, versions, and downloads. WebView is restricted to authentication flows." \
+              --title "Minecraft AIO v0.1.2-alpha" \
+              --notes "Fixes MCPEDL native parsing, Bedrock Tweaks TLS host handling, provider-specific sign-in buttons, secure Google Custom Tab sign-in, dark authentication UI, and user-friendly native network errors." \
               --prerelease
           fi
