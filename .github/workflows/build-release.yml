@@ -19,7 +19,8 @@ jobs:
         run: |
           if [ -d .bootstrap-v012 ]; then
             echo "2d14616e422f7571328f8d3e4375b9ff84b943174dd2d2755bc57361c175e91e  .bootstrap-v012/part00" | sha256sum -c -
-            echo "4b5cc2359c14dac19050d899a3051d45f6c497c8153ac9128fb1dbccda195b0e  .bootstrap-v012/part01" | sha256sum -c -
+            echo "c7775e0202d7c90aebf39d9dc9ec31597115c785e7e1d1c7fd943a1361337a3f  .bootstrap-v012/part010" | sha256sum -c -
+            echo "d681064e63b781a891a210441a03c08e59ae419c8325c02b733c0f35f0ef5212  .bootstrap-v012/part011" | sha256sum -c -
             echo "647458b803163248235bf6d803d62a9b020330d37edc9d71a2d61a4b79606f87  .bootstrap-v012/part020" | sha256sum -c -
             echo "da6d64388c1c390fffcf523f1af66fedba8b6ee4e843fcf5133919e4164b6e33  .bootstrap-v012/part021" | sha256sum -c -
             echo "f0ba8256f798d0bb27958cedeb58590124acc20f2847a9295647a36a0a413654  .bootstrap-v012/part030" | sha256sum -c -
@@ -29,7 +30,8 @@ jobs:
             echo "6f8f7bfd2614f80bb22b7fd9c2a55da54e2af71e40c2c8c56670652664110629  .bootstrap-v012/part041" | sha256sum -c -
             echo "1a409103f69c748871eb3dd59f0f3cc53823a824eb52a7900096b7e300d54c2f  .bootstrap-v012/part05" | sha256sum -c -
             cat .bootstrap-v012/part00 \
-                .bootstrap-v012/part01 \
+                .bootstrap-v012/part010 \
+                .bootstrap-v012/part011 \
                 .bootstrap-v012/part020 \
                 .bootstrap-v012/part021 \
                 .bootstrap-v012/part030 \
