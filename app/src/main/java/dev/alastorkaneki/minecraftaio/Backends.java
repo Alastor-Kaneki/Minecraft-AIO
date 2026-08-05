@@ -19,6 +19,8 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -26,7 +28,9 @@ import java.util.Set;
 
 final class Backends {
     static final String USER_AGENT =
-            "Minecraft-AIO/0.1.1-alpha (Android; github.com/Alastor-Kaneki/Minecraft-AIO)";
+            "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 "
+                    + "(KHTML, like Gecko) Chrome/138.0 Mobile Safari/537.36 "
+                    + "Minecraft-AIO/0.1.2-alpha";
 
     interface Backend {
         String name();
@@ -56,15 +60,7 @@ final class Backends {
                 "https://www.planetminecraft.com/search/?keywords=%s",
                 "a.r-info__title, a[href*='/project/'], a[href*='/texture-pack/'], a[href*='/mod/'], a[href*='/skin/'], a[href*='/data-pack/'], a[href*='/maps/']"
         ));
-        list.add(new HtmlBackend(
-                "MCPEDL",
-                "Bedrock",
-                "https://mcpedl.com/",
-                favicon("mcpedl.com"),
-                "Bedrock addons, maps, texture packs, shaders and seeds.",
-                "https://mcpedl.com/?s=%s",
-                "article h2 a, h2.entry-title a, .post-title a, .entry-title a"
-        ));
+        list.add(new McpedlBackend());
         list.add(new StaticBackend(
                 "Vanilla Tweaks",
                 "Java",
@@ -80,13 +76,13 @@ final class Backends {
         list.add(new StaticBackend(
                 "Bedrock Tweaks",
                 "Bedrock",
-                "https://www.bedrocktweaks.net/",
+                "https://bedrocktweaks.net/",
                 favicon("bedrocktweaks.net"),
                 "Native catalog access to Bedrock visual, gameplay and crafting tweaks.",
                 new String[][]{
-                        {"Resource Packs", "Browse Bedrock visual and quality-of-life tweaks.", "https://www.bedrocktweaks.net/resource-packs", "resource pack"},
-                        {"Addons", "Browse Bedrock gameplay addon ports.", "https://www.bedrocktweaks.net/addons", "addon"},
-                        {"Crafting Tweaks", "Browse Bedrock crafting tweaks.", "https://www.bedrocktweaks.net/crafting-tweaks", "crafting"}
+                        {"Resource Packs", "Browse Bedrock visual and quality-of-life tweaks.", "https://bedrocktweaks.net/resource-packs", "resource pack"},
+                        {"Addons", "Browse Bedrock gameplay addon ports.", "https://bedrocktweaks.net/addons", "addon"},
+                        {"Crafting Tweaks", "Browse Bedrock crafting tweaks.", "https://bedrocktweaks.net/crafting-tweaks", "crafting"}
                 }
         ));
         list.add(new StaticBackend(
@@ -156,6 +152,13 @@ final class Backends {
 
     private static String encode(String value) {
         return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return "";
     }
 
     private static String trim(String value, int max) {
@@ -243,6 +246,101 @@ final class Backends {
                 ));
             }
             return results;
+        }
+    }
+
+
+    private static final class McpedlBackend implements Backend {
+        private static final String[] CATEGORIES = new String[]{
+                "https://mcpedl.com/category/mods/addons/page/1/",
+                "https://mcpedl.com/category/maps/page/1/",
+                "https://mcpedl.com/category/texture-packs/page/1/",
+                "https://mcpedl.com/category/skin-packs/page/1/",
+                "https://mcpedl.com/skins/page/1/"
+        };
+        private static final Set<String> RESERVED = new HashSet<>(Arrays.asList(
+                "", "login", "register", "contact", "about", "vip", "privacy", "terms",
+                "category", "tag", "author", "user", "wp-admin", "wp-json", "feed"
+        ));
+
+        public String name() { return "MCPEDL"; }
+        public String edition() { return "Bedrock"; }
+        public String homeUrl() { return "https://mcpedl.com/"; }
+        public String logoUrl() { return favicon("mcpedl.com"); }
+        public String tagline() { return "Bedrock addons, maps, texture packs, shaders and skins."; }
+
+        @Override
+        public List<ContentItem> featured(Context context) throws Exception {
+            return collect("");
+        }
+
+        @Override
+        public List<ContentItem> search(Context context, String query) throws Exception {
+            return collect(query == null ? "" : query.trim());
+        }
+
+        private List<ContentItem> collect(String query) throws Exception {
+            String needle = query.toLowerCase(Locale.US);
+            List<ContentItem> results = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            Exception lastError = null;
+
+            for (String category : CATEGORIES) {
+                if (results.size() >= 30) break;
+                try {
+                    Document document = getDocument(category);
+                    for (Element link : document.select("a[href]")) {
+                        if (results.size() >= 30) break;
+                        String href = link.absUrl("href");
+                        String title = trim(link.text(), 140);
+                        if (title.length() < 4 || !isItemUrl(href) || !seen.add(href)) continue;
+
+                        Element container = link.closest(
+                                "article, .post, .post-item, .entry, .listing-item, .card, li");
+                        if (container == null) container = link.parent();
+                        String description = container == null
+                                ? "MCPEDL Bedrock content"
+                                : trim(container.text(), 260);
+                        String haystack = (title + " " + description).toLowerCase(Locale.US);
+                        if (!needle.isBlank() && !haystack.contains(needle)) continue;
+
+                        String image = logoUrl();
+                        Element imageNode = container == null ? null : container.selectFirst(
+                                "img[src], img[data-src], img[data-lazy-src]");
+                        if (imageNode != null) {
+                            image = firstNonBlank(
+                                    imageNode.absUrl("data-src"),
+                                    imageNode.absUrl("data-lazy-src"),
+                                    imageNode.absUrl("src"),
+                                    logoUrl());
+                        }
+                        results.add(new ContentItem(
+                                name(), title, description, href, "Bedrock content",
+                                image, "", ""));
+                    }
+                } catch (Exception error) {
+                    lastError = error;
+                }
+            }
+
+            if (results.isEmpty() && lastError != null) throw lastError;
+            return results;
+        }
+
+        private boolean isItemUrl(String href) {
+            try {
+                URL url = new URL(href);
+                String host = url.getHost().toLowerCase(Locale.US);
+                if (!(host.equals("mcpedl.com") || host.equals("www.mcpedl.com"))) return false;
+                String path = url.getPath();
+                if (path == null) return false;
+                String[] raw = path.split("/");
+                List<String> parts = new ArrayList<>();
+                for (String part : raw) if (!part.isBlank()) parts.add(part.toLowerCase(Locale.US));
+                return parts.size() == 1 && !RESERVED.contains(parts.get(0));
+            } catch (Exception ignored) {
+                return false;
+            }
         }
     }
 

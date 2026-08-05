@@ -105,8 +105,19 @@ final class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.Holder> {
                 ? Backends.favicon(item.source.toLowerCase().replace(" ", "") + ".com")
                 : item.imageUrl;
         RemoteImage.load(holder.logo, image);
-        holder.open.setOnClickListener(v -> DetailActivity.open(v.getContext(), item));
-        holder.card.setOnClickListener(v -> DetailActivity.open(v.getContext(), item));
+        boolean actionable = !("error".equalsIgnoreCase(item.type)
+                || "source status".equalsIgnoreCase(item.type)
+                || "empty".equalsIgnoreCase(item.type));
+        holder.open.setEnabled(actionable);
+        holder.card.setClickable(actionable);
+        holder.card.setFocusable(actionable);
+        holder.open.setText(actionable ? "View in Minecraft AIO" : "Nothing to open");
+        holder.open.setOnClickListener(actionable
+                ? v -> DetailActivity.open(v.getContext(), item)
+                : null);
+        holder.card.setOnClickListener(actionable
+                ? v -> DetailActivity.open(v.getContext(), item)
+                : null);
     }
 
     @Override

@@ -252,9 +252,33 @@ public final class DetailActivity extends AppCompatActivity {
         progress.setVisibility(View.GONE);
         downloads.removeAllViews();
         related.removeAllViews();
-        String message = error.getMessage() == null ? "The source request failed." : error.getMessage();
+        String raw = error.getMessage() == null ? "" : error.getMessage();
+        String message;
+        if (raw.toLowerCase().contains("hostname") || raw.toLowerCase().contains("certificate")) {
+            message = "Minecraft AIO could not verify this source's secure connection. The unsafe response was blocked.";
+        } else if (raw.toLowerCase().contains("timeout")) {
+            message = "The source took too long to respond. Try again in a moment.";
+        } else if (raw.toLowerCase().contains("http 404")) {
+            message = "This item is no longer available at the source.";
+        } else {
+            message = "This source could not be loaded natively right now.";
+        }
         downloads.addView(note(message));
-        related.addView(note("Normal browsing remains inside Minecraft AIO; no browser fallback was opened."));
+        MaterialButton retry = new MaterialButton(this);
+        retry.setText("Retry");
+        retry.setAllCaps(false);
+        retry.setOnClickListener(v -> {
+            progress.setVisibility(View.VISIBLE);
+            downloads.removeAllViews();
+            downloads.addView(note("Trying again…"));
+            related.removeAllViews();
+            related.addView(note("Refreshing native details…"));
+            loadDetails();
+        });
+        downloads.addView(retry, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        related.addView(note("No external browser was opened."));
     }
 
     private void downloadFile(NativeDetails.Download download) {

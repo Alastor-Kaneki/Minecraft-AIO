@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
 
 final class RemoteImage {
     private static final String USER_AGENT =
-            "Minecraft-AIO/0.1.1-alpha (Android; github.com/Alastor-Kaneki/Minecraft-AIO)";
+            "Minecraft-AIO/0.1.2-alpha (Android; github.com/Alastor-Kaneki/Minecraft-AIO)";
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<String, Bitmap> CACHE = new ConcurrentHashMap<>();

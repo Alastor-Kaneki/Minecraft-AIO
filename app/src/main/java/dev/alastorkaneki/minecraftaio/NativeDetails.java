@@ -156,7 +156,8 @@ final class NativeDetails {
         }
         if (item.url.isBlank()) return result;
 
-        Document document = Backends.getDocument(item.url);
+        String normalizedUrl = item.url.replace("https://www.bedrocktweaks.net", "https://bedrocktweaks.net");
+        Document document = Backends.getDocument(normalizedUrl);
         Element description = document.selectFirst(
                 "meta[property=og:description], meta[name=description], meta[name=twitter:description]");
         if (description != null) {
@@ -178,7 +179,7 @@ final class NativeDetails {
 
         Set<String> seenDownloads = new LinkedHashSet<>();
         Set<String> seenRelated = new LinkedHashSet<>();
-        String sourceHost = host(item.url);
+        String sourceHost = host(normalizedUrl);
         Elements links = document.select("a[href]");
         for (Element link : links) {
             String href = link.absUrl("href");
@@ -219,7 +220,7 @@ final class NativeDetails {
                 || lower.contains("forgecdn.net/")
                 || lower.contains("mediafilez.com/")
                 || lower.contains("githubusercontent.com/")) return true;
-        return lower.matches(".*\\.(zip|jar|mcpack|mcaddon|mcworld|mctemplate|mcstructure|json|png|jpg|jpeg|webp)(\\?.*)?$");
+        return lower.matches(".*\\.(zip|jar|mcpack|mcaddon|mcworld|mctemplate|mcstructure)(\\?.*)?$");
     }
 
     private static String fileName(String url) {

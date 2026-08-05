@@ -151,6 +151,20 @@ public final class SourceActivity extends AppCompatActivity {
                         ""
                 ));
             }
+            if (items.isEmpty()) {
+                items.add(new ContentItem(
+                        backend.name(),
+                        query.isBlank() ? "No catalog items found" : "No matching results",
+                        query.isBlank()
+                                ? "This source did not return any usable items right now."
+                                : "No items on the currently indexed catalog pages matched “" + query + "”.",
+                        "",
+                        "empty",
+                        backend.logoUrl(),
+                        "",
+                        ""
+                ));
+            }
             runOnUiThread(() -> {
                 adapter.replace(items);
                 progress.setVisibility(View.GONE);

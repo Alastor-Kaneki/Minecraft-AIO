@@ -21,6 +21,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.browser.customtabs.CustomTabColorSchemeParams;
+import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -53,17 +55,16 @@ public final class MainActivity extends AppCompatActivity {
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private FrameLayout content;
     private MaterialToolbar toolbar;
-    private String pendingTitle;
-    private String pendingLoginUrl;
+    private String pendingGoogleTitle;
+    private String pendingGoogleUrl;
 
     private final ActivityResultLauncher<Intent> googleAccountPicker =
             registerForActivityResult(
                     new ActivityResultContracts.StartActivityForResult(),
                     result -> {
                         if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
-                        String accountName =
-                                result.getData().getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
-                        launchLogin(pendingTitle, pendingLoginUrl, "google", accountName);
+                        String accountName = result.getData().getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+                        openGoogleAuth(pendingGoogleTitle, pendingGoogleUrl, accountName);
                     });
 
     @Override
@@ -273,37 +274,38 @@ public final class MainActivity extends AppCompatActivity {
         });
     }
 
+    private static final String CURSEFORGE_SSO =
+            "https://curseforge.overwolf.com/auth/v3/login-start.html?key=5604bf10017987e856b58c35497a816d0dda4233e03790f11cae00cef5367842";
+    private static final String MODRINTH_RETURN =
+            "https%3A%2F%2Fmodrinth.com%2Fauth%2Fsign-in%3Fredirect%3D";
+
     private void showAccounts() {
-        setToolbar("Accounts", "Sign in without turning the app into a browser");
+        setToolbar("Accounts", "Real provider routes, without fake login buttons");
         LinearLayout body = verticalBody();
         body.addView(heading("Connected services"));
         body.addView(paragraph(
-                "Each service keeps its own website session. Google starts with Android's account chooser. Discord and every other provider continue inside an isolated authentication WebView."));
+                "Google authentication opens in a secure Chrome Custom Tab because Google blocks embedded WebView sign-in. Discord and standard site sign-in stay in isolated authentication WebViews."));
 
-        addAccountCard(
-                body,
-                "Planet Minecraft",
-                "Community account for uploads, favorites and comments.",
+        addAccountCard(body, "Planet Minecraft",
+                "Planet Minecraft currently offers email and password sign-in.",
                 Backends.favicon("planetminecraft.com"),
-                "https://www.planetminecraft.com/account/sign_in/");
-        addAccountCard(
-                body,
-                "MCPEDL",
-                "Bedrock downloads, comments and creator account.",
+                "https://www.planetminecraft.com/account/sign_in/",
+                false, false, false, false, false, false, false);
+        addAccountCard(body, "MCPEDL",
+                "MCPEDL currently offers email or username and password sign-in.",
                 Backends.favicon("mcpedl.com"),
-                "https://mcpedl.com/login/");
-        addAccountCard(
-                body,
-                "CurseForge",
-                "CurseForge account and supported identity providers.",
+                "https://mcpedl.com/login/",
+                false, false, false, false, false, false, false);
+        addAccountCard(body, "CurseForge",
+                "CurseForge SSO supports Google, Discord, GitHub and Twitch.",
                 Backends.favicon("curseforge.com"),
-                "https://www.curseforge.com/login");
-        addAccountCard(
-                body,
-                "Modrinth",
-                "Modrinth account, Google, GitHub, Discord and other providers.",
+                CURSEFORGE_SSO,
+                true, true, true, false, false, false, true);
+        addAccountCard(body, "Modrinth",
+                "Modrinth supports Google, Discord, GitHub, Microsoft, Steam and GitLab.",
                 Backends.favicon("modrinth.com"),
-                "https://modrinth.com/auth/sign-in");
+                "https://modrinth.com/auth/sign-in",
+                true, true, true, true, true, true, false);
 
         setScrollContent(body);
     }
@@ -313,7 +315,14 @@ public final class MainActivity extends AppCompatActivity {
             String title,
             String subtitle,
             String logoUrl,
-            String loginUrl
+            String loginUrl,
+            boolean google,
+            boolean discord,
+            boolean github,
+            boolean microsoft,
+            boolean steam,
+            boolean gitlab,
+            boolean twitch
     ) {
         MaterialCardView card = card();
         LinearLayout cardBody = verticalBodyNoScroll();
@@ -330,50 +339,110 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(14), 0, 0, 0);
-
         TextView titleView = heading(title);
         titleView.setTextSize(20);
         titleView.setPadding(0, 0, 0, dp(2));
         labels.addView(titleView);
-
         TextView subtitleView = paragraph(subtitle);
         subtitleView.setPadding(0, 0, 0, dp(4));
         labels.addView(subtitleView);
-
-        Chip status = new Chip(this);
-        status.setCheckable(false);
-        String cookies = CookieManager.getInstance().getCookie(loginUrl);
-        status.setText(cookies == null || cookies.isBlank() ? "Not signed in" : "Session saved");
-        labels.addView(status, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
         header.addView(labels, new LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f));
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         cardBody.addView(header);
 
-        cardBody.addView(providerButton(
+        if (google) cardBody.addView(providerButton(
                 "Continue with Google",
-                "Choose an Android Google account",
+                "Secure account chooser outside WebView",
                 Backends.favicon("accounts.google.com"),
-                () -> chooseGoogleAccount(title, loginUrl)));
-
-        cardBody.addView(providerButton(
-                "Continue with Discord or another method",
-                "Open the provider choices in the sign-in WebView",
+                () -> chooseGoogleAccount(title, providerUrl(title, "google", loginUrl))));
+        if (discord) cardBody.addView(providerButton(
+                "Continue with Discord",
+                "Open the real Discord provider route",
                 Backends.favicon("discord.com"),
-                () -> launchLogin(title, loginUrl, "discord", null)));
+                () -> launchProviderLogin(title, loginUrl, "discord")));
+        if (github) cardBody.addView(providerButton(
+                "Continue with GitHub", "Open the real GitHub provider route",
+                Backends.favicon("github.com"),
+                () -> launchProviderLogin(title, loginUrl, "github")));
+        if (microsoft) cardBody.addView(providerButton(
+                "Continue with Microsoft", "Open the Microsoft provider route",
+                Backends.favicon("microsoft.com"),
+                () -> launchProviderLogin(title, loginUrl, "microsoft")));
+        if (steam) cardBody.addView(providerButton(
+                "Continue with Steam", "Open the Steam provider route",
+                Backends.favicon("steampowered.com"),
+                () -> launchProviderLogin(title, loginUrl, "steam")));
+        if (gitlab) cardBody.addView(providerButton(
+                "Continue with GitLab", "Open the GitLab provider route",
+                Backends.favicon("gitlab.com"),
+                () -> launchProviderLogin(title, loginUrl, "gitlab")));
+        if (twitch) cardBody.addView(providerButton(
+                "Continue with Twitch", "Open the Twitch provider route",
+                Backends.favicon("twitch.tv"),
+                () -> launchProviderLogin(title, loginUrl, "twitch")));
 
         cardBody.addView(providerButton(
-                "Standard sign-in",
-                "Use email, username, password or any method the site offers",
+                google || discord || github || microsoft || steam || gitlab || twitch
+                        ? "All sign-in methods" : "Sign in",
+                "Use every authentication method offered by this service",
                 logoUrl,
                 () -> launchLogin(title, loginUrl, null, null)));
 
         card.addView(cardBody);
         body.addView(card);
+    }
+
+    private String providerUrl(String service, String provider, String fallback) {
+        if ("Modrinth".equalsIgnoreCase(service)) {
+            return "https://api.modrinth.com/v2/auth/init?provider=" + provider
+                    + "&url=" + MODRINTH_RETURN;
+        }
+        return fallback;
+    }
+
+    private void chooseGoogleAccount(String title, String url) {
+        pendingGoogleTitle = title;
+        pendingGoogleUrl = url;
+        Intent picker = AccountManager.newChooseAccountIntent(
+                null,
+                null,
+                new String[]{"com.google"},
+                "Choose a Google account",
+                null,
+                null,
+                null);
+        googleAccountPicker.launch(picker);
+    }
+
+    private void openGoogleAuth(String title, String url, String accountName) {
+        android.net.Uri target = android.net.Uri.parse(url);
+        if (accountName != null && !accountName.isBlank()) {
+            target = target.buildUpon().appendQueryParameter("login_hint", accountName).build();
+        }
+        CustomTabColorSchemeParams dark = new CustomTabColorSchemeParams.Builder()
+                .setToolbarColor(Color.BLACK)
+                .setNavigationBarColor(Color.BLACK)
+                .build();
+        CustomTabsIntent intent = new CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .setUrlBarHidingEnabled(true)
+                .setColorScheme(CustomTabsIntent.COLOR_SCHEME_DARK)
+                .setDefaultColorSchemeParams(dark)
+                .setColorSchemeParams(CustomTabsIntent.COLOR_SCHEME_DARK, dark)
+                .build();
+        try {
+            intent.launchUrl(this, target);
+        } catch (Exception error) {
+            Toast.makeText(this, "No secure browser is available for Google sign-in", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void launchProviderLogin(String title, String loginUrl, String provider) {
+        String target = providerUrl(title, provider, loginUrl);
+        // Modrinth exposes direct provider endpoints. CurseForge exposes one SSO
+        // entry page, so its authentication-only WebView selects the requested provider.
+        String webViewSelector = "Modrinth".equalsIgnoreCase(title) ? null : provider;
+        launchLogin(title, target, webViewSelector, null);
     }
 
     private MaterialCardView providerButton(
@@ -388,7 +457,6 @@ public final class MainActivity extends AppCompatActivity {
         button.setClickable(true);
         button.setFocusable(true);
         button.setCardElevation(0);
-
         LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -399,32 +467,20 @@ public final class MainActivity extends AppCompatActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), dp(12), dp(14), dp(12));
-
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         row.addView(icon, new LinearLayout.LayoutParams(dp(34), dp(34)));
         RemoteImage.load(icon, iconUrl);
-
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(14), 0, dp(8), 0);
-
-        TextView titleView = text(title, 16, Typeface.BOLD);
-        titleView.setSingleLine(false);
-        labels.addView(titleView);
-
+        labels.addView(text(title, 16, Typeface.BOLD));
         TextView subtitleView = text(subtitle, 13, Typeface.NORMAL);
         subtitleView.setMaxLines(2);
         labels.addView(subtitleView);
-
         row.addView(labels, new LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f));
-
-        TextView arrow = text("›", 30, Typeface.NORMAL);
-        row.addView(arrow);
-
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(text("›", 30, Typeface.NORMAL));
         button.addView(row);
         button.setOnClickListener(v -> action.run());
         return button;
@@ -493,19 +549,6 @@ public final class MainActivity extends AppCompatActivity {
         return edition.toLowerCase().contains(filter.toLowerCase());
     }
 
-    private void chooseGoogleAccount(String title, String loginUrl) {
-        pendingTitle = title;
-        pendingLoginUrl = loginUrl;
-        Intent picker = AccountManager.newChooseAccountIntent(
-                null,
-                null,
-                new String[]{"com.google"},
-                "Choose a Google account",
-                null,
-                null,
-                null);
-        googleAccountPicker.launch(picker);
-    }
 
     private void launchLogin(
             String title,

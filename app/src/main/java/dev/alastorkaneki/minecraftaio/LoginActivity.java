@@ -1,14 +1,11 @@
 package dev.alastorkaneki.minecraftaio;
 
-import android.app.DownloadManager;
-import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
-import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -22,11 +19,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 
 import com.google.android.material.appbar.MaterialToolbar;
-
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 
 public final class LoginActivity extends AppCompatActivity {
     static final String EXTRA_TITLE = "title";
@@ -35,6 +31,7 @@ public final class LoginActivity extends AppCompatActivity {
     static final String EXTRA_LOGIN_HINT = "login_hint";
 
     private WebView webView;
+    private boolean providerClicked;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -45,7 +42,6 @@ public final class LoginActivity extends AppCompatActivity {
         String title = getIntent().getStringExtra(EXTRA_TITLE);
         String url = getIntent().getStringExtra(EXTRA_URL);
         String provider = getIntent().getStringExtra(EXTRA_PROVIDER);
-        String loginHint = getIntent().getStringExtra(EXTRA_LOGIN_HINT);
         if (url == null || url.isBlank()) {
             finish();
             return;
@@ -53,16 +49,21 @@ public final class LoginActivity extends AppCompatActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        if (Prefs.isAmoled(this)) root.setBackgroundColor(0xFF000000);
+        if (Prefs.isAmoled(this)) root.setBackgroundColor(Color.BLACK);
 
         MaterialToolbar toolbar = new MaterialToolbar(this);
         toolbar.setTitle(title == null ? "Sign in" : title);
+        toolbar.setSubtitle("Secure sign-in session");
         toolbar.setNavigationIcon(android.R.drawable.ic_media_previous);
         toolbar.setNavigationOnClickListener(v -> finish());
-        root.addView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(toolbar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         webView = new WebView(this);
-        root.addView(webView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        webView.setBackgroundColor(Prefs.isAmoled(this) ? Color.BLACK : Color.TRANSPARENT);
+        root.addView(webView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
 
         CookieManager cookies = CookieManager.getInstance();
@@ -73,9 +74,12 @@ public final class LoginActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setSupportMultipleWindows(true);
-        settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " Minecraft-AIO/0.1.0-alpha");
+        settings.setSupportMultipleWindows(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString() + " Minecraft-AIO/0.1.2-alpha");
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, Prefs.isAmoled(this));
+        }
 
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
@@ -90,32 +94,22 @@ public final class LoginActivity extends AppCompatActivity {
                 }
                 return true;
             }
-        });
 
-        webView.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) -> {
-            try {
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
-                request.setMimeType(mimeType);
-                request.addRequestHeader("User-Agent", userAgent);
-                String cookie = CookieManager.getInstance().getCookie(downloadUrl);
-                if (cookie != null) request.addRequestHeader("Cookie", cookie);
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "minecraft-aio-download");
-                ((DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(request);
-            } catch (Exception ignored) {
+            @Override
+            public void onPageFinished(WebView view, String finishedUrl) {
+                super.onPageFinished(view, finishedUrl);
+                if (providerClicked || provider == null || provider.isBlank()) return;
+                providerClicked = true;
+                String safeProvider = provider.replace("'", "").toLowerCase();
+                String javascript = "(function(){const p='" + safeProvider + "';"
+                        + "const e=[...document.querySelectorAll('a,button,[role=button]')]"
+                        + ".find(x=>((x.innerText||x.textContent||'').toLowerCase().includes(p)));"
+                        + "if(e){e.click();return 'clicked';}return 'not-found';})();";
+                view.postDelayed(() -> view.evaluateJavascript(javascript, null), 450);
             }
         });
 
-        StringBuilder target = new StringBuilder(url);
-        char separator = url.contains("?") ? '&' : '?';
-        if (provider != null && !provider.isBlank()) {
-            target.append(separator).append("provider=").append(URLEncoder.encode(provider, StandardCharsets.UTF_8));
-            separator = '&';
-        }
-        if (loginHint != null && !loginHint.isBlank()) {
-            target.append(separator).append("login_hint=").append(URLEncoder.encode(loginHint, StandardCharsets.UTF_8));
-        }
-        webView.loadUrl(target.toString());
+        webView.loadUrl(url);
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -127,9 +121,11 @@ public final class LoginActivity extends AppCompatActivity {
 
     private void enterImmersive() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         controller.hide(WindowInsetsCompat.Type.systemBars());
-        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        controller.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
     }
 
     @Override
