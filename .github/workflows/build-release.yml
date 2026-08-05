@@ -15,29 +15,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Expand native source bootstrap
-        run: |
-          if [ -d .bootstrap ]; then
-            cat .bootstrap/part* | base64 --decode > project.zip
-          fi
-          if [ -f project.zip ]; then
-            unzip -o project.zip
-            rm -rf project.zip .bootstrap
-          fi
-
-      - name: Publish expanded source to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # The bootstrap may contain a newer workflow, but the Actions token is
-          # not allowed to update workflow files. Publish source separately.
-          git restore --source=HEAD -- .github/workflows/build-release.yml
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Add native browsing redesign"
-            git push origin HEAD:main
-          fi
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -55,19 +32,19 @@ jobs:
       - name: Prepare release asset
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/Minecraft-AIO-v0.1.0-alpha.apk
-          sha256sum release/Minecraft-AIO-v0.1.0-alpha.apk > release/Minecraft-AIO-v0.1.0-alpha.apk.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk release/Minecraft-AIO-v0.1.1-alpha.apk
+          sha256sum release/Minecraft-AIO-v0.1.1-alpha.apk > release/Minecraft-AIO-v0.1.1-alpha.apk.sha256
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Minecraft-AIO-v0.1.0-alpha
+          name: Minecraft-AIO-v0.1.1-alpha
           path: release/*
 
       - name: Create or repair GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v0.1.0-alpha
+          TAG: v0.1.1-alpha
         run: |
           TARGET="$(git rev-parse HEAD)"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -75,7 +52,7 @@ jobs:
           else
             gh release create "$TAG" release/* \
               --target "$TARGET" \
-              --title "Minecraft AIO v0.1.0-alpha" \
-              --notes "Initial native Android alpha. This APK is debug-signed and installable." \
+              --title "Minecraft AIO v0.1.1-alpha" \
+              --notes "Native browsing redesign: responsive branded account controls, in-app source catalogs, native details, screenshots, versions, and downloads. WebView is restricted to authentication flows." \
               --prerelease
           fi
