@@ -1,4 +1,4 @@
-name: Build and publish v0.1.2 alpha
+name: Build and publish v0.1.3 alpha
 
 on:
   push:
@@ -32,19 +32,19 @@ jobs:
       - name: Prepare release asset
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/Minecraft-AIO-v0.1.2-alpha.apk
-          sha256sum release/Minecraft-AIO-v0.1.2-alpha.apk > release/Minecraft-AIO-v0.1.2-alpha.apk.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk release/Minecraft-AIO-v0.1.3-alpha.apk
+          sha256sum release/Minecraft-AIO-v0.1.3-alpha.apk > release/Minecraft-AIO-v0.1.3-alpha.apk.sha256
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Minecraft-AIO-v0.1.2-alpha
+          name: Minecraft-AIO-v0.1.3-alpha
           path: release/*
 
       - name: Create or repair GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v0.1.2-alpha
+          TAG: v0.1.3-alpha
         run: |
           TARGET="$(git rev-parse HEAD)"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -52,7 +52,7 @@ jobs:
           else
             gh release create "$TAG" release/* \
               --target "$TARGET" \
-              --title "Minecraft AIO v0.1.2-alpha" \
-              --notes "Fixes MCPEDL native parsing, Bedrock Tweaks TLS host handling, provider-specific sign-in buttons, secure Google Custom Tab sign-in, dark authentication UI, and user-friendly native network errors." \
+              --title "Minecraft AIO v0.1.3-alpha" \
+              --notes "Routes Vanilla Tweaks, Bedrock Tweaks, and BEComTweaks bundle builders into a dedicated in-app interactive picker. Supports JavaScript, uploads, normal downloads, generated blob downloads, secure TLS blocking, immersive mode, and saving generated packs directly to Downloads without an external browser." \
               --prerelease
           fi
