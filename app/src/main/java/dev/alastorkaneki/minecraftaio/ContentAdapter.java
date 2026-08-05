@@ -108,16 +108,23 @@ final class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.Holder> {
         boolean actionable = !("error".equalsIgnoreCase(item.type)
                 || "source status".equalsIgnoreCase(item.type)
                 || "empty".equalsIgnoreCase(item.type));
+        boolean picker = actionable && PickerActivity.handles(item);
         holder.open.setEnabled(actionable);
         holder.card.setClickable(actionable);
         holder.card.setFocusable(actionable);
-        holder.open.setText(actionable ? "View in Minecraft AIO" : "Nothing to open");
-        holder.open.setOnClickListener(actionable
-                ? v -> DetailActivity.open(v.getContext(), item)
-                : null);
-        holder.card.setOnClickListener(actionable
-                ? v -> DetailActivity.open(v.getContext(), item)
-                : null);
+        holder.open.setText(actionable
+                ? (picker ? "Open picker in Minecraft AIO" : "View in Minecraft AIO")
+                : "Nothing to open");
+
+        android.view.View.OnClickListener listener = null;
+        if (actionable) {
+            listener = v -> {
+                if (picker) PickerActivity.open(v.getContext(), item);
+                else DetailActivity.open(v.getContext(), item);
+            };
+        }
+        holder.open.setOnClickListener(listener);
+        holder.card.setOnClickListener(listener);
     }
 
     @Override
