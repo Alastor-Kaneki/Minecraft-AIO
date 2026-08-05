@@ -22,6 +22,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".PickerActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".DetailActivity"
             android:exported="false" />
 
