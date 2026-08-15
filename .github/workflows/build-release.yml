@@ -1,9 +1,6 @@
 name: Build Minecraft Hub
 
 on:
-  push:
-    branches:
-      - chatgpt/minecraft-hub-build
   workflow_dispatch:
 
 permissions:
