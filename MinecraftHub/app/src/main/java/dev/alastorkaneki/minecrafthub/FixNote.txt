@@ -1,0 +1,1 @@
+Compatibility patch pending MainActivity attribute namespace update.
