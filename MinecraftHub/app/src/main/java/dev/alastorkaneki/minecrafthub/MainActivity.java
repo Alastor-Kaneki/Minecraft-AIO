@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +28,16 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.color.DynamicColors;
+import com.google.android.material.color.MaterialColors;
+
 import java.io.File;
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -43,13 +54,20 @@ import java.util.concurrent.Executors;
 import rikka.shizuku.Shizuku;
 
 public class MainActivity extends Activity {
-    private static final int BG = Color.rgb(10, 13, 12);
-    private static final int PANEL = Color.rgb(20, 27, 24);
-    private static final int PANEL2 = Color.rgb(28, 39, 34);
-    private static final int GREEN = Color.rgb(110, 219, 131);
-    private static final int TEXT = Color.rgb(239, 247, 241);
-    private static final int MUTED = Color.rgb(158, 177, 165);
+    private static final int FALLBACK_BG = Color.rgb(10, 13, 12);
+    private static final int FALLBACK_PANEL = Color.rgb(20, 27, 24);
+    private static final int FALLBACK_PANEL2 = Color.rgb(28, 39, 34);
+    private static final int FALLBACK_ACCENT = Color.rgb(110, 219, 131);
+    private static final int FALLBACK_TEXT = Color.rgb(239, 247, 241);
+    private static final int FALLBACK_MUTED = Color.rgb(158, 177, 165);
     private static final int SHIZUKU_REQ = 5287;
+
+    private int BG = FALLBACK_BG;
+    private int PANEL = FALLBACK_PANEL;
+    private int PANEL2 = FALLBACK_PANEL2;
+    private int GREEN = FALLBACK_ACCENT;
+    private int TEXT = FALLBACK_TEXT;
+    private int MUTED = FALLBACK_MUTED;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private LinearLayout content;
@@ -76,8 +94,9 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(BG);
-        getWindow().setNavigationBarColor(BG);
+        DynamicColors.applyToActivityIfAvailable(this);
+        resolveMaterialColors();
+        applyImmersiveMode();
         Shizuku.addRequestPermissionResultListener(permissionListener);
         buildUi();
         showApps();
@@ -85,7 +104,13 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        applyImmersiveMode();
         if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED && !bound) bindShizuku();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyImmersiveMode();
     }
 
     @Override protected void onDestroy() {
@@ -97,8 +122,19 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(14), dp(16), dp(12));
+        final int baseLeft = dp(16), baseTop = dp(14), baseRight = dp(16), baseBottom = dp(12);
+        root.setPadding(baseLeft, baseTop, baseRight, baseBottom);
         root.setBackgroundColor(BG);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            Insets gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures());
+            view.setPadding(baseLeft + Math.max(cutout.left, gestures.left),
+                    baseTop + cutout.top,
+                    baseRight + Math.max(cutout.right, gestures.right),
+                    baseBottom + Math.max(cutout.bottom, gestures.bottom));
+            return insets;
+        });
+
         root.addView(label("MINECRAFT HUB", 28, TEXT, true));
         subtitle = label("Launcher • packs • Minecraft data", 13, MUTED, false);
         root.addView(subtitle);
@@ -120,6 +156,7 @@ public class MainActivity extends Activity {
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
+        ViewCompat.requestApplyInsets(root);
     }
 
     private void clear(String s) { content.removeAllViews(); subtitle.setText(s); }
@@ -206,10 +243,39 @@ public class MainActivity extends Activity {
 
     private void showData() {
         clear("Minecraft external data");
-        content.addView(info("Minecraft Data", "The Hub tests normal access first, then Shizuku/ADB/root for the protected Android/data location."));
-        dataPath("LEGACY EXTERNAL", legacyPath());
-        dataPath("MODERN ANDROID/DATA", modernPath());
-        Button s = big(bound ? "SHIZUKU CONNECTED" : "CONNECT SHIZUKU"); s.setOnClickListener(v -> ensureShizuku()); content.addView(s);
+        content.addView(info("Minecraft Data", "Minecraft's current External storage is inside Android/data. The Hub tries direct access first, then its Shizuku UserService running as ADB shell/root."));
+        dataPath("MINECRAFT EXTERNAL • ANDROID/DATA", modernPath());
+        dataPath("LEGACY /games/com.mojang", legacyPath());
+
+        if (bound) {
+            content.addView(section("Minecraft shortcuts"));
+            minecraftShortcut("WORLDS", "minecraftWorlds");
+            minecraftShortcut("RESOURCE PACKS", "resource_packs");
+            minecraftShortcut("BEHAVIOR PACKS", "behavior_packs");
+            minecraftShortcut("DEV RESOURCE PACKS", "development_resource_packs");
+            minecraftShortcut("DEV BEHAVIOR PACKS", "development_behavior_packs");
+        }
+
+        Button s = big(bound ? "SHIZUKU CONNECTED • TEST ANDROID/DATA" : "CONNECT SHIZUKU");
+        s.setOnClickListener(v -> { if (bound) testProtectedAccess(); else ensureShizuku(); });
+        content.addView(s);
+    }
+
+    private void minecraftShortcut(String title, String child) {
+        String path = modernPath() + "/" + child;
+        Button b = big(title);
+        b.setOnClickListener(v -> browsePrivileged(path));
+        content.addView(b);
+    }
+
+    private void testProtectedAccess() {
+        io.execute(() -> {
+            try {
+                boolean ok = privileged != null && privileged.canRead(modernPath());
+                String detail = privileged == null ? "Service disconnected" : privileged.lastError();
+                runOnUiThread(() -> toast(ok ? "Android/data access works through Shizuku" : "Blocked: " + detail));
+            } catch (Exception e) { runOnUiThread(() -> toast("Access test failed: " + e.getMessage())); }
+        });
     }
 
     private void dataPath(String title, String path) {
@@ -246,7 +312,11 @@ public class MainActivity extends Activity {
         clear("Shizuku • " + path);
         io.execute(() -> {
             try {
-                if (privileged == null || !privileged.canRead(path)) { runOnUiThread(() -> content.addView(info("Access denied", "Shizuku identity cannot read this path on this device."))); return; }
+                if (privileged == null || !privileged.canRead(path)) {
+                    String detail = privileged == null ? "Service disconnected" : privileged.lastError();
+                    runOnUiThread(() -> content.addView(info("Access denied", detail)));
+                    return;
+                }
                 String[] list = privileged.list(path);
                 runOnUiThread(() -> renderPrivileged(path, list));
             } catch (Exception e) { runOnUiThread(() -> toast("Shizuku error: " + e.getMessage())); }
@@ -265,6 +335,12 @@ public class MainActivity extends Activity {
             c.setOnClickListener(v -> { if (dir) browsePrivileged(full); else exportPrivileged(full, name); });
             content.addView(c);
         }
+        if (list.length == 0) content.addView(info("Empty or blocked", privilegedError()));
+    }
+
+    private String privilegedError() {
+        try { return privileged == null ? "Service disconnected" : privileged.lastError(); }
+        catch (Exception e) { return e.getMessage(); }
     }
 
     private void exportPrivileged(String source, String name) {
@@ -279,9 +355,9 @@ public class MainActivity extends Activity {
 
     private void showAccess() {
         clear("Permissions & detection");
-        content.addView(info("All files access", hasAllFiles() ? "Granted" : "Not granted"));
+        content.addView(info("All files access", hasAllFiles() ? "Granted • shared storage scanner enabled" : "Not granted • needed for whole-storage pack scanning"));
         Button files = big("OPEN ALL FILES ACCESS"); files.setOnClickListener(v -> requestAllFiles()); content.addView(files);
-        content.addView(info("Shizuku", shizukuStatus()));
+        content.addView(info("Shizuku Android/data bridge", shizukuStatus() + "\nRuns the protected file service as ADB shell (UID 2000) or root (UID 0)."));
         Button shizuku = big("CONNECT / REQUEST SHIZUKU"); shizuku.setOnClickListener(v -> ensureShizuku()); content.addView(shizuku);
         Button add = big("ADD APP MANUALLY"); add.setOnClickListener(v -> manualPicker()); content.addView(add);
         Button reset = big("RESET HIDDEN APPS"); reset.setOnClickListener(v -> { getSharedPreferences("rules", MODE_PRIVATE).edit().remove("exclude_packages").apply(); toast("Hidden apps reset"); }); content.addView(reset);
@@ -350,12 +426,29 @@ public class MainActivity extends Activity {
     private static String legacyPath() { return Environment.getExternalStorageDirectory() + "/games/com.mojang"; }
     private static boolean isPack(String n) { String s = n.toLowerCase(Locale.ROOT); return s.endsWith(".mcpack") || s.endsWith(".mcaddon"); }
 
+    private void resolveMaterialColors() {
+        BG = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface, FALLBACK_BG);
+        PANEL = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurfaceVariant, FALLBACK_PANEL);
+        PANEL2 = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSecondaryContainer, FALLBACK_PANEL2);
+        GREEN = MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary, FALLBACK_ACCENT);
+        TEXT = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, FALLBACK_TEXT);
+        MUTED = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurfaceVariant, FALLBACK_MUTED);
+    }
+
+    private void applyImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        if (Build.VERSION.SDK_INT >= 29) getWindow().setNavigationBarContrastEnforced(false);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        controller.hide(WindowInsetsCompat.Type.systemBars());
+    }
+
     private LinearLayout card() { LinearLayout c = new LinearLayout(this); c.setPadding(dp(14),dp(12),dp(14),dp(12)); c.setBackground(round(PANEL, 16)); LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,0,0,dp(8)); c.setLayoutParams(p); return c; }
     private View info(String title, String body) { LinearLayout c = card(); c.setOrientation(LinearLayout.VERTICAL); c.addView(label(title,15,TEXT,true)); c.addView(label(body,12,MUTED,false)); return c; }
     private TextView section(String s) { TextView t = label(s.toUpperCase(Locale.ROOT),12,GREEN,true); t.setPadding(dp(4),dp(12),0,dp(6)); return t; }
     private Button tab(String s, View.OnClickListener l) { Button b = small(s); b.setOnClickListener(l); return b; }
-    private Button small(String s) { Button b = new Button(this); b.setText(s); b.setTextColor(TEXT); b.setTextSize(11); b.setAllCaps(false); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(round(PANEL2,12)); b.setPadding(dp(12),dp(7),dp(12),dp(7)); return b; }
-    private Button big(String s) { Button b = new Button(this); b.setText(s); b.setTextColor(TEXT); b.setTextSize(12); b.setAllCaps(false); b.setTypeface(Typeface.DEFAULT_BOLD); b.setGravity(Gravity.CENTER_VERTICAL); b.setBackground(round(PANEL2,14)); LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,0,0,dp(8)); b.setLayoutParams(p); return b; }
+    private Button small(String s) { MaterialButton b = new MaterialButton(this); b.setText(s); b.setTextColor(TEXT); b.setTextSize(11); b.setAllCaps(false); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackgroundTintList(ColorStateList.valueOf(PANEL2)); b.setCornerRadius(dp(12)); b.setPadding(dp(12),dp(7),dp(12),dp(7)); return b; }
+    private Button big(String s) { MaterialButton b = new MaterialButton(this); b.setText(s); b.setTextColor(TEXT); b.setTextSize(12); b.setAllCaps(false); b.setTypeface(Typeface.DEFAULT_BOLD); b.setGravity(Gravity.CENTER_VERTICAL); b.setBackgroundTintList(ColorStateList.valueOf(PANEL2)); b.setCornerRadius(dp(14)); LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,0,0,dp(8)); b.setLayoutParams(p); return b; }
     private TextView label(String s, float sp, int color, boolean bold) { TextView t = new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(color); t.setTypeface(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL); return t; }
     private GradientDrawable round(int color, int radius) { GradientDrawable g = new GradientDrawable(); g.setColor(color); g.setCornerRadius(dp(radius)); return g; }
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
